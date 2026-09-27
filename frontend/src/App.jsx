@@ -35,7 +35,7 @@ import {
   Speed
 } from '@mui/icons-material';
 
-const AI_API_URL = 'http://localhost:5000/api';
+const AI_API_URL = 'https://mohamed11ismail.pythonanywhere.com/api';
 
 export default function App() {
   const [emails, setEmails] = useState([]);

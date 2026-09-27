@@ -1,0 +1,16 @@
+
+# Python
+__pycache__/
+*.pyc
+
+# Training data (too large for git; not needed at runtime, only for retraining)
+ai/spam_Emails_data.csv
+ai/enron_spam_data.csv
+
+# Node
+node_modules/
+frontend/dist/
+
+# Editor/OS
+.vscode/
+.DS_Store

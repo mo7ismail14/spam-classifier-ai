@@ -219,7 +219,7 @@ export default function App() {
         <Toolbar>
           <Security sx={{ mr: 2 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            Enron Spam Classification • SVM Microservice
+            detect Spam Classification • SVM Microservice
           </Typography>
           {/* <Chip label="Node Gateway :4000" size="small" sx={{ mr: 1, color: '#fff', borderColor: 'rgba(255,255,255,0.4)' }} variant="outlined" /> */}
           {/* <Chip label="Flask AI :5000" size="small" sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.4)' }} variant="outlined" /> */}

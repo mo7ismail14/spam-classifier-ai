@@ -5,7 +5,7 @@
 
 import sys
 
-path = '/home/<your_username>/spam-classifier-ai/ai'
+path = '/home/mohamed11ismail/spam-classifier-ai/ai'
 if path not in sys.path:
     sys.path.append(path)
 

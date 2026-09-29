@@ -2,10 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV, KFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 import joblib
+
+from Algorithm.svm import train_svm
+from Algorithm.logistic_regression import train_logistic_regression
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'spam_Emails_data.csv')
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'model')
@@ -65,34 +67,6 @@ def vectorize_text(X_train, X_test):
     return X_train_vec, X_test_vec, vectorizer
 
 
-def train_model(X_train_vec, y_train):
-    print("Configuring K-Fold Cross-Validation & Hyperparameter Grid...")
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-    param_grid = {
-        'C': [0.1, 1.0, 10.0],
-        'kernel': ['linear', 'rbf'],
-        'gamma': ['scale', 'auto']
-    }
-
-    svm = SVC(probability=True, random_state=42)
-    grid_search = GridSearchCV(
-        estimator=svm,
-        param_grid=param_grid,
-        cv=kfold,
-        scoring='f1',
-        n_jobs=-1,
-        verbose=1
-    )
-
-    print("Fitting GridSearchCV (finding best C, kernel, and gamma)...")
-    grid_search.fit(X_train_vec, y_train)
-
-    best_model = grid_search.best_estimator_
-    print(f"Best Hyperparameters: {grid_search.best_params_}")
-    print(f"Best CV Score (F1): {grid_search.best_score_:.4f}")
-    return best_model, grid_search.best_params_
-
-
 def evaluate_model(best_model, X_test_vec, y_test, best_params):
     print("Calculating Confusion Matrix on Test Set...")
     y_pred = best_model.predict(X_test_vec)
@@ -129,13 +103,18 @@ def prepare_dropdown_samples(X_test, y_test, n_per_class=100):
     return dropdown_samples
 
 
-def save_artifacts(model_dir, best_model, vectorizer, metrics, dropdown_samples):
+def save_model_artifacts(model_dir, model, vectorizer, metrics):
     os.makedirs(model_dir, exist_ok=True)
-    print("Saving best model, vectorizer, metrics, and email samples...")
-    joblib.dump(best_model, os.path.join(model_dir, 'svm_model.pkl'))
+    joblib.dump(model, os.path.join(model_dir, 'model.pkl'))
     joblib.dump(vectorizer, os.path.join(model_dir, 'vectorizer.pkl'))
     joblib.dump(metrics, os.path.join(model_dir, 'metrics.pkl'))
+    print(f"Saved model, vectorizer, and metrics to {model_dir}")
+
+
+def save_shared_samples(model_dir, dropdown_samples):
+    os.makedirs(model_dir, exist_ok=True)
     joblib.dump(dropdown_samples, os.path.join(model_dir, 'sample_emails.pkl'))
+    print(f"Saved shared sample emails to {model_dir}")
 
 
 def main():
@@ -148,11 +127,20 @@ def main():
     X_train, X_test, y_train, y_test = split_data(df_sample)
 
     X_train_vec, X_test_vec, vectorizer = vectorize_text(X_train, X_test)
-    best_model, best_params = train_model(X_train_vec, y_train)
-    metrics = evaluate_model(best_model, X_test_vec, y_test, best_params)
 
+    # SVM Training
+    svm_model, svm_params = train_svm(X_train_vec, y_train)
+    svm_metrics = evaluate_model(svm_model, X_test_vec, y_test, svm_params)
+    save_model_artifacts(os.path.join(MODEL_DIR, 'SVM'), svm_model, vectorizer, svm_metrics)
+
+    # Logistic Regression Training
+    logreg_model, logreg_params = train_logistic_regression(X_train_vec, y_train)
+    logreg_metrics = evaluate_model(logreg_model, X_test_vec, y_test, logreg_params)
+    save_model_artifacts(os.path.join(MODEL_DIR, 'LogisticRegression'), logreg_model, vectorizer, logreg_metrics)
+
+    # Save shared sample emails
     dropdown_samples = prepare_dropdown_samples(X_test, y_test)
-    save_artifacts(MODEL_DIR, best_model, vectorizer, metrics, dropdown_samples)
+    save_shared_samples(MODEL_DIR, dropdown_samples)
 
     print("Training and model serialization successfully completed!")
 

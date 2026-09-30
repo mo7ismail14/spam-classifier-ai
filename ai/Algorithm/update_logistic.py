@@ -8,28 +8,25 @@ RANDOM_STATE = 42
 
 
 def train_logistic_regression(X_train, y_train):
-    print(
-        "[LogisticRegression] Configuring Stratified K-Fold "
-        "Cross-Validation & Pipeline..."
+    pipeline = Pipeline(
+        [
+            (
+                "tfidf",
+                TfidfVectorizer(
+                    stop_words="english",
+                    max_features=4000,
+                    ngram_range=(1, 2),
+                ),
+            ),
+            (
+                "model",
+                LogisticRegression(
+                    max_iter=1000,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
     )
-
-    pipeline = Pipeline([
-        (
-            "tfidf",
-            TfidfVectorizer(
-                stop_words="english",
-                max_features=4000,
-                ngram_range=(1, 2),
-            ),
-        ),
-        (
-            "logreg",
-            LogisticRegression(
-                max_iter=1000,
-                random_state=RANDOM_STATE,
-            ),
-        ),
-    ])
 
     cv = StratifiedKFold(
         n_splits=5,
@@ -38,37 +35,30 @@ def train_logistic_regression(X_train, y_train):
     )
 
     param_grid = {
-        "logreg__C": [0.01, 0.1, 1.0, 10.0],
-        "logreg__solver": ["lbfgs", "liblinear"],
+        "model__C": [0.01, 0.1, 1.0, 10.0],
+        "model__solver": ["lbfgs", "liblinear"],
     }
 
-    grid_search = GridSearchCV(
-        estimator=pipeline,
-        param_grid=param_grid,
+    search = GridSearchCV(
+        pipeline,
+        param_grid,
         cv=cv,
         scoring="f1",
         n_jobs=-1,
         verbose=1,
     )
 
-    print(
-        "[LogisticRegression] Fitting GridSearchCV "
-        "(finding best C and solver)..."
-    )
-
-    grid_search.fit(X_train, y_train)
+    print("[LogisticRegression] Training...")
+    search.fit(X_train, y_train)
 
     print(
-        f"[LogisticRegression] Best Hyperparameters: "
-        f"{grid_search.best_params_}"
+        f"[LogisticRegression] "
+        f"Best parameters: {search.best_params_}"
     )
 
     print(
-        f"[LogisticRegression] Best CV Score (F1): "
-        f"{grid_search.best_score_:.4f}"
+        f"[LogisticRegression] "
+        f"Best CV F1: {search.best_score_:.4f}"
     )
 
-    return (
-        grid_search.best_estimator_,
-        grid_search.best_params_,
-    )
+    return search.best_estimator_, search.best_params_

@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -6,11 +7,16 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 import joblib
 
+# ai/ is the project root for sibling packages (Algorithm/); this script lives in ai/training/.
+AI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if AI_DIR not in sys.path:
+    sys.path.insert(0, AI_DIR)
+
 from Algorithm.svm import train_svm
 from Algorithm.logistic_regression import train_logistic_regression
 
-CSV_PATH = os.path.join(os.path.dirname(__file__), 'spam_Emails_data.csv')
-MODEL_DIR = os.path.join(os.path.dirname(__file__), 'model')
+CSV_PATH = os.path.join(AI_DIR, 'dataset', 'spam_Emails_data.csv')
+MODEL_DIR = os.path.join(AI_DIR, 'model')
 SAMPLE_N_PER_CLASS = 1200
 
 

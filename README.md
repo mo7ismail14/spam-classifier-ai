@@ -33,8 +33,11 @@ cd ai
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Train the SVM model using GridSearchCV and K-Fold CV (saves to model/)
-python train.py
+# 2. Train the spam classifier models (SVM + Logistic Regression) via GridSearchCV and K-Fold CV (saves to model/)
+python training/train_spam_classifier.py
+
+# 2b. Train the loan approval Decision Tree (saves to model/DecisionTree/)
+python training/train_decision_tree.py
 
 # 3. Start the Flask AI server (Runs on http://localhost:5000)
 python app.py

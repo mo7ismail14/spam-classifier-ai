@@ -15,6 +15,12 @@ const routes = [
     label: 'Spam Classifier',
     showInNav: true,
     component: lazy(() => import('../pages/Spam'))
+  },
+  {
+    path: '/loan',
+    label: 'Loan Approval',
+    showInNav: true,
+    component: lazy(() => import('../pages/LoanApproval'))
   }
 ];
 

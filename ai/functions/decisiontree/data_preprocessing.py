@@ -6,7 +6,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OrdinalEncoder
+from sklearn.preprocessing import OrdinalEncoder, FunctionTransformer
 
 # Continuous numeric features (median imputation; Decision Trees don't need scaling).
 NUMERIC_FEATURES: list[str] = ['ApplicantIncome', 'CoapplicantIncome', 'LoanAmount', 'Loan_Amount_Term']
@@ -17,10 +17,25 @@ BINARY_FEATURES: list[str] = ['Credit_History']
 # Nominal categorical features -> most-frequent imputation + ordinal encoding.
 CATEGORICAL_FEATURES: list[str] = ['Gender', 'Married', 'Dependents', 'Education', 'Self_Employed', 'Property_Area']
 
-# Column order after the ColumnTransformer runs (must match the transformer list below).
-ENCODED_FEATURE_ORDER: list[str] = NUMERIC_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES
+# The 11 fields an applicant/the frontend form actually supplies. This never changes,
+# regardless of USE_ENGINEERED_FEATURES, since engineered columns are derived, not input.
+ALL_INPUT_FEATURES: list[str] = NUMERIC_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES
 
-ALL_INPUT_FEATURES: list[str] = ENCODED_FEATURE_ORDER
+# Derived numeric features, computed from the raw inputs above (see add_engineered_features).
+ENGINEERED_FEATURES: list[str] = ['TotalIncome', 'EMI', 'IncomeToLoan', 'BalanceIncome']
+
+# Toggle: when True, build_preprocessor() prepends an engineering step and the tree is
+# trained on NUMERIC_FEATURES + ENGINEERED_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES.
+# Flip only after comparing CV macro F1 with/without (see training/train_decision_tree.py).
+USE_ENGINEERED_FEATURES: bool = False
+
+# Column order after the preprocessor runs (must match build_preprocessor()'s transformer
+# list below). This is what rule_extraction.py and feature_importances are indexed by —
+# NOT what the API/frontend form exposes (that's always ALL_INPUT_FEATURES).
+if USE_ENGINEERED_FEATURES:
+    ENCODED_FEATURE_ORDER: list[str] = NUMERIC_FEATURES + ENGINEERED_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES
+else:
+    ENCODED_FEATURE_ORDER: list[str] = NUMERIC_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES
 
 TARGET_COLUMN: str = 'Loan_Status'
 
@@ -36,6 +51,10 @@ FEATURE_DISPLAY_NAMES: dict[str, str] = {
     'Education': 'Education',
     'Self_Employed': 'Self-Employment Status',
     'Property_Area': 'Property Area',
+    'TotalIncome': 'Total Household Income',
+    'EMI': 'Estimated Monthly Installment',
+    'IncomeToLoan': 'Income-to-Loan Ratio',
+    'BalanceIncome': 'Income Remaining After EMI',
 }
 
 
@@ -90,18 +109,52 @@ def clean_loan_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def split_features_and_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Separate raw input features from the encoded (0/1) target column."""
+    """Separate raw input features (always just the 11 user-supplied fields, regardless
+    of USE_ENGINEERED_FEATURES) from the encoded (0/1) target column."""
     X = df[ALL_INPUT_FEATURES].copy()
     y = df[TARGET_COLUMN].apply(lambda status: 1 if str(status).strip().upper() == 'Y' else 0)
     return X, y
 
 
-def build_preprocessor() -> ColumnTransformer:
-    """Build the ColumnTransformer that imputes missing values and encodes categoricals.
+def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Pure function: derive numeric features from the raw loan fields.
+
+    TotalIncome = ApplicantIncome + CoapplicantIncome
+    EMI = LoanAmount / Loan_Amount_Term
+    IncomeToLoan = TotalIncome / LoanAmount
+    BalanceIncome = TotalIncome - EMI * 1000
+
+    Division by zero produces inf, which is converted to NaN so the downstream
+    imputer fills it like any other missing value.
+    """
+    df = df.copy()
+    applicant_income = pd.to_numeric(df['ApplicantIncome'], errors='coerce')
+    coapplicant_income = pd.to_numeric(df['CoapplicantIncome'], errors='coerce')
+    loan_amount = pd.to_numeric(df['LoanAmount'], errors='coerce')
+    loan_term = pd.to_numeric(df['Loan_Amount_Term'], errors='coerce')
+
+    total_income = applicant_income + coapplicant_income
+    emi = (loan_amount / loan_term).replace([np.inf, -np.inf], np.nan)
+    income_to_loan = (total_income / loan_amount).replace([np.inf, -np.inf], np.nan)
+    balance_income = total_income - emi * 1000
+
+    df['TotalIncome'] = total_income
+    df['EMI'] = emi
+    df['IncomeToLoan'] = income_to_loan
+    df['BalanceIncome'] = balance_income
+    return df
+
+
+def build_preprocessor():
+    """Build the preprocessor that imputes missing values, caps outliers, and encodes
+    categoricals. When USE_ENGINEERED_FEATURES is True, a FunctionTransformer step runs
+    first to derive TotalIncome/EMI/IncomeToLoan/BalanceIncome from the raw inputs.
 
     Output column order matches ENCODED_FEATURE_ORDER, which the rule-extraction
-    module relies on to map a Decision Tree split back to a named feature.
+    module and feature_importances rely on to map a Decision Tree split back to a name.
     """
+    numeric_columns = NUMERIC_FEATURES + ENGINEERED_FEATURES if USE_ENGINEERED_FEATURES else NUMERIC_FEATURES
+
     numeric_pipeline = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
         ('outlier_capper', IQROutlierCapper())
@@ -112,13 +165,24 @@ def build_preprocessor() -> ColumnTransformer:
         ('encoder', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1))
     ])
 
-    return ColumnTransformer(transformers=[
-        ('numeric', numeric_pipeline, NUMERIC_FEATURES),
+    column_transformer = ColumnTransformer(transformers=[
+        ('numeric', numeric_pipeline, numeric_columns),
         ('binary', SimpleImputer(strategy='most_frequent'), BINARY_FEATURES),
         ('categorical', categorical_pipeline, CATEGORICAL_FEATURES)
     ])
 
+    if not USE_ENGINEERED_FEATURES:
+        return column_transformer
 
-def get_categorical_encoder(preprocessor: ColumnTransformer) -> OrdinalEncoder:
-    """Fetch the fitted OrdinalEncoder from within the preprocessor (used to decode categories)."""
-    return preprocessor.named_transformers_['categorical'].named_steps['encoder']
+    return Pipeline(steps=[
+        ('engineer', FunctionTransformer(add_engineered_features, validate=False)),
+        ('columns', column_transformer)
+    ])
+
+
+def get_categorical_encoder(preprocessor) -> OrdinalEncoder:
+    """Fetch the fitted OrdinalEncoder from within the preprocessor (used to decode
+    categories). Handles both the bare ColumnTransformer and the engineered-features
+    Pipeline wrapping it."""
+    column_transformer = preprocessor.named_steps['columns'] if isinstance(preprocessor, Pipeline) else preprocessor
+    return column_transformer.named_transformers_['categorical'].named_steps['encoder']

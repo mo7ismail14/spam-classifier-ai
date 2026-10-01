@@ -12,6 +12,11 @@ def _describe_condition(feature_name: str, raw_value, threshold: float, went_lef
     """Turn one tree split into a plain-English clause using the applicant's own value."""
     display_name = FEATURE_DISPLAY_NAMES.get(feature_name, feature_name)
 
+    if raw_value is None or (isinstance(raw_value, float) and np.isnan(raw_value)):
+        # The applicant left this field blank; the preprocessor imputed a value for the
+        # tree split, but we should not claim to know the applicant's actual value.
+        return f"{display_name} is not provided (the model filled in a typical value)"
+
     if feature_name in BINARY_FEATURES:
         # Credit_History: 0/1 stored as a number but really means "poor"/"good".
         return f"{display_name} is {'good' if float(raw_value) >= 0.5 else 'poor'}"

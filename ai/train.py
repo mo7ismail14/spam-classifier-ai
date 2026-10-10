@@ -8,8 +8,9 @@ import joblib
 
 from Algorithm.svm import train_svm
 from Algorithm.logistic_regression import train_logistic_regression
+from Algorithm.RandomForest import train_random_forest
 
-CSV_PATH = os.path.join(os.path.dirname(__file__), 'spam_Emails_data.csv')
+CSV_PATH = os.path.join(os.path.dirname(__file__), 'data/spam_Emails_data.csv')
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'model')
 SAMPLE_N_PER_CLASS = 1200
 
@@ -137,6 +138,11 @@ def main():
     logreg_model, logreg_params = train_logistic_regression(X_train_vec, y_train)
     logreg_metrics = evaluate_model(logreg_model, X_test_vec, y_test, logreg_params)
     save_model_artifacts(os.path.join(MODEL_DIR, 'LogisticRegression'), logreg_model, vectorizer, logreg_metrics)
+
+    # Random Forest Training
+    rf_model, rf_params = train_random_forest(X_train_vec, y_train)
+    rf_metrics = evaluate_model(rf_model, X_test_vec, y_test, rf_params)
+    save_model_artifacts(os.path.join(MODEL_DIR, 'RandomForest'), rf_model, vectorizer, rf_metrics)
 
     # Save shared sample emails
     dropdown_samples = prepare_dropdown_samples(X_test, y_test)

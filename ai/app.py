@@ -74,6 +74,7 @@ def predict():
     data = request.get_json(force=True, silent=True) or {}
     text = data.get('text', '')
     model_name = data.get('model', '')
+    print("Received prediction request for model:", model_name)
 
     if not text.strip():
         return jsonify({"error": "No email text provided"}), 400
